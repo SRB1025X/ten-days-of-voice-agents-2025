@@ -1,0 +1,10 @@
+{
+  "beverage": "Cappuccino",
+  "size": "Tall",
+  "milk": "2%",
+  "customizations": [
+    "Vanilla syrup",
+    "Extra whipped cream"
+  ],
+  "customer_name": "Sam"
+}

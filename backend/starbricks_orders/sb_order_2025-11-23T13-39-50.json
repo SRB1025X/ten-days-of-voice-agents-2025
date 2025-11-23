@@ -1,0 +1,11 @@
+{
+  "beverage": "Cappuccino",
+  "size": "Venti",
+  "milk": "2%",
+  "customizations": [
+    "Extra shot",
+    "Vanilla syrup",
+    "Whipped cream"
+  ],
+  "customer_name": "Sam"
+}
