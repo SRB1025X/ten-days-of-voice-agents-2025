@@ -1,0 +1,23 @@
+[
+  {
+    "timestamp": "2025-11-24T06:02:36",
+    "mood": "A little down",
+    "energy": "Low",
+    "stressors": "Deadlines",
+    "objectives": [
+      "Complete at least half of my work"
+    ],
+    "summary": "User is feeling a little down with low energy, and deadlines are stressing them out. Main goal is to complete at least half of their work."
+  },
+  {
+    "timestamp": "2025-11-24T06:02:43",
+    "mood": "a little down",
+    "energy": "a bit low",
+    "stressors": "deadlines",
+    "objectives": [
+      "complete at least half of my work",
+      "get a good night's sleep for tomorrow's challenges"
+    ],
+    "summary": "Feeling a little down with low energy due to deadlines. Goals are to complete half of work and get good sleep."
+  }
+]

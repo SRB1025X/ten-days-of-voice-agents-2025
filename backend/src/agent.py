@@ -2,7 +2,7 @@ import logging
 import os
 import json
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 from dotenv import load_dotenv
 from livekit.agents import (
@@ -22,73 +22,105 @@ from livekit.agents import (
 from livekit.plugins import murf, silero, google, deepgram, noise_cancellation
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
-logger = logging.getLogger("starbricks_agent")
+logger = logging.getLogger("wellness_companion_agent")
 
 load_dotenv(".env.local")
 
 
+WELLNESS_LOG_FILE = os.path.join(
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "..")),
+    "wellness_log.json"
+)
+
+
 # -------------------------------------------------- #
-#    TOOL: Save StarBricks-style coffee orders       #
+#   Utility: Load previous wellness check-ins        #
+# -------------------------------------------------- #
+def load_wellness_history() -> List[dict]:
+    if not os.path.exists(WELLNESS_LOG_FILE):
+        return []
+    try:
+        with open(WELLNESS_LOG_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+
+# -------------------------------------------------- #
+#   TOOL: Save a wellness check-in entry             #
 # -------------------------------------------------- #
 @function_tool
-async def save_starbricks_order(
+async def save_wellness_checkin(
     ctx: RunContext,
-    beverage: str,
-    size: str,
-    milk: str,
-    customizations: List[str],
-    customer_name: str,
+    mood: str,
+    energy: str,
+    stressors: Optional[str],
+    objectives: List[str],
+    summary: str,
 ) -> str:
-    """Store the fully confirmed StarBricks drink order."""
+    """Store a daily wellness check-in to a JSON log file."""
 
-    order_payload = {
-        "beverage": beverage,
-        "size": size,  # Tall / Grande / Venti
-        "milk": milk,  # Whole / Skim / Oat / Soy / Almond
-        "customizations": customizations or [],
-        "customer_name": customer_name,
+    entry = {
+        "timestamp": datetime.utcnow().isoformat(timespec="seconds"),
+        "mood": mood,
+        "energy": energy,
+        "stressors": stressors or "",
+        "objectives": objectives,
+        "summary": summary,
     }
 
-    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    order_dir = os.path.join(base_dir, "starbricks_orders")
-    os.makedirs(order_dir, exist_ok=True)
+    history = load_wellness_history()
+    history.append(entry)
 
-    timestamp = datetime.utcnow().isoformat(timespec="seconds").replace(":", "-")
-    filename = f"sb_order_{timestamp}.json"
-    filepath = os.path.join(order_dir, filename)
+    with open(WELLNESS_LOG_FILE, "w", encoding="utf-8") as f:
+        json.dump(history, f, indent=2, ensure_ascii=False)
 
-    with open(filepath, "w", encoding="utf-8") as f:
-        json.dump(order_payload, f, indent=2, ensure_ascii=False)
-
-    return f"saved:{filepath}"
+    return "saved"
 
 
 # -------------------------------------------------- #
-#      AGENT PERSONA — STARBRICKS BARISTA            #
+#   AGENT PERSONA — WELLNESS CHECK-IN COMPANION      #
 # -------------------------------------------------- #
-class StarBricksAssistant(Agent):
+class WellnessCompanion(Agent):
     def __init__(self) -> None:
+
+        previous_entries = load_wellness_history()
+        last_ref = ""
+
+        if previous_entries:
+            last = previous_entries[-1]
+            last_ref = (
+                f"Last time you mentioned your mood was '{last['mood']}' and "
+                f"your energy was '{last['energy']}'. "
+                "Feel free to check how today compares."
+            )
 
         super().__init__(
             instructions=(
-                "You are a cheerful barista at the premium coffee shop **StarBricks**. "
-                "Start by welcoming the customer warmly: 'Welcome to StarBricks!' "
-                "Help them build a full coffee order with the following structure:\n"
-                "{\n"
-                '  "beverage": "e.g. Latte, Cappuccino, Americano, Mocha",\n'
-                '  "size": "Tall, Grande, or Venti",\n'
-                '  "milk": "Whole, Skim, 2%, Oat, Soy, Almond",\n'
-                '  "customizations": ["Extra shot", "Vanilla syrup", "Caramel drizzle", "Whipped cream", etc.],\n'
-                '  "customer_name": "Their name"\n'
-                "}\n"
-                "Ask short, friendly clarification questions until all fields are filled. "
-                "Confirm everything clearly before calling:\n"
-                "`save_starbricks_order(beverage, size, milk, customizations, customer_name)`\n"
-                "After saving the order, give the customer a warm thank-you message including "
-                "their name and the file path returned by the tool. "
-                "Do NOT respond to harmful, unsafe, or illegal requests."
+                "You are a calm, supportive Daily Health & Wellness Companion.\n"
+                "Your job is to conduct gentle, short daily check-ins. Avoid medical or diagnostic language.\n\n"
+
+                "=== CHECK-IN FLOW ===\n"
+                "1. Ask about today's mood.\n"
+                "2. Ask about today's energy level.\n"
+                "3. Ask if anything is stressing them out.\n"
+                "4. Ask for 1–3 goals or intentions for the day.\n"
+                "5. Provide small, grounded, non-medical advice.\n"
+                "6. Give a recap of mood + main goals.\n"
+                "7. Call the tool:\n"
+                "`save_wellness_checkin(mood, energy, stressors, objectives, summary)`\n\n"
+
+                "=== ADVICE STYLE ===\n"
+                "- Offer small, actionable suggestions.\n"
+                "- Encourage pacing, breaks, and simple self-care.\n"
+                "- Never give medical, diagnostic, or clinical guidance.\n\n"
+
+                f"=== OPTIONAL CONTEXT FROM PAST CHECK-INS ===\n"
+                f"{last_ref}\n\n"
+
+                "Keep responses warm, concise, and human-like. Proceed step-by-step."
             ),
-            tools=[save_starbricks_order],
+            tools=[save_wellness_checkin],
         )
 
 
@@ -133,12 +165,12 @@ async def entrypoint(ctx: JobContext):
         usage.collect(ev.metrics)
 
     async def show_usage():
-        logger.info(f"StarBricks usage summary: {usage.get_summary()}")
+        logger.info(f"Wellness Companion usage summary: {usage.get_summary()}")
 
     ctx.add_shutdown_callback(show_usage)
 
     await session.start(
-        agent=StarBricksAssistant(),
+        agent=WellnessCompanion(),
         room=ctx.room,
         room_input_options=RoomInputOptions(
             noise_cancellation=noise_cancellation.BVC()
