@@ -1,0 +1,47 @@
+[
+  {
+    "case_id": "CASE-1001",
+    "username": "raj",
+    "customer_name": "Raj Kumar",
+    "security_question": "What is the name of your first pet?",
+    "security_answer": "tommy",
+    "masked_card": "**** 1234",
+    "transaction_amount": "₹3,499.00",
+    "merchant_name": "Vogue Electronics",
+    "location": "Hyderabad, IN",
+    "timestamp": "2025-11-20T14:32:00Z",
+    "status": "confirmed_safe",
+    "outcome_note": "Customer confirmed transaction was legitimate.",
+    "last_updated": "2025-11-26T18:54:15"
+  },
+  {
+    "case_id": "CASE-1003",
+    "username": "neha",
+    "customer_name": "Neha Rao",
+    "security_question": "What is the name of your first pet?",
+    "security_answer": "booxer",
+    "masked_card": "**** 5678",
+    "transaction_amount": "₹8,499.00",
+    "merchant_name": "Vogue Electronics",
+    "location": "Hyderabad, IN",
+    "timestamp": "2025-11-20T14:32:00Z",
+    "status": "verification_failed",
+    "outcome_note": "Security question answer mismatch. Call ended.",
+    "last_updated": "2025-11-26T18:56:18"
+  },
+  {
+    "case_id": "CASE-1002",
+    "username": "sam",
+    "customer_name": "Sneha Rao",
+    "security_question": "Which city were you born in?",
+    "security_answer": "visakhapatnam",
+    "masked_card": "**** 9876",
+    "transaction_amount": "₹799.00",
+    "merchant_name": "Daily Foods Pvt Ltd",
+    "location": "Bengaluru, IN",
+    "timestamp": "2025-11-21T19:05:00Z",
+    "status": "verification_failed",
+    "outcome_note": "Security question answer mismatch. Call ended.",
+    "last_updated": "2025-11-26T18:57:05"
+  }
+]
