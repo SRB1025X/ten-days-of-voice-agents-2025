@@ -1,0 +1,58 @@
+{
+  "order_id": "ORD-20251128175150",
+  "timestamp": "2025-11-28T17:51:50",
+  "customer_name": "Sam",
+  "address": "Hyderabad Telangana",
+  "items": [
+    {
+      "name": "White Bread (400g)",
+      "subtotal": 2.5,
+      "id": 1,
+      "qty": 1,
+      "unit_price": 2.5
+    },
+    {
+      "name": "Spaghetti (500g)",
+      "unit_price": 1.8,
+      "id": 2,
+      "subtotal": 1.8,
+      "qty": 1
+    },
+    {
+      "subtotal": 3,
+      "qty": 1,
+      "id": 3,
+      "unit_price": 3,
+      "name": "Tomato Sauce (standard jar)"
+    },
+    {
+      "name": "Garlic",
+      "subtotal": 0.5,
+      "id": 4,
+      "unit_price": 0.5,
+      "qty": 1
+    },
+    {
+      "id": 5,
+      "unit_price": 0.75,
+      "name": "Onion",
+      "qty": 1,
+      "subtotal": 0.75
+    },
+    {
+      "subtotal": 7.2,
+      "name": "Whole Milk (1 Liter)",
+      "qty": 6,
+      "id": 6,
+      "unit_price": 1.2
+    },
+    {
+      "name": "Whole Wheat Bread (400g)",
+      "unit_price": 2.7,
+      "subtotal": 2.7,
+      "id": 7,
+      "qty": 1
+    }
+  ],
+  "total": 18.45
+}

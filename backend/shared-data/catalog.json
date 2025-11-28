@@ -1,0 +1,160 @@
+{
+  "meta": {
+    "store_name": "FoodMate Market",
+    "currency": "INR"
+  },
+  "items": [
+    {
+      "id": "bread_wholewheat",
+      "name": "Whole Wheat Bread (400g)",
+      "category": "Groceries",
+      "price": 55.0,
+      "unit": "loaf",
+      "tags": [
+        "vegan"
+      ]
+    },
+    {
+      "id": "milk_1l",
+      "name": "Milk 1L (Toned)",
+      "category": "Groceries",
+      "price": 48.0,
+      "unit": "bottle",
+      "tags": []
+    },
+    {
+      "id": "eggs_6",
+      "name": "Eggs (6 pack)",
+      "category": "Groceries",
+      "price": 60.0,
+      "unit": "pack",
+      "tags": []
+    },
+    {
+      "id": "peanut_butter_200g",
+      "name": "Peanut Butter 200g",
+      "category": "Groceries",
+      "price": 190.0,
+      "unit": "jar",
+      "tags": [
+        "vegan"
+      ]
+    },
+    {
+      "id": "pasta_500g",
+      "name": "Pasta 500g",
+      "category": "Groceries",
+      "price": 120.0,
+      "unit": "pack",
+      "tags": []
+    },
+    {
+      "id": "pasta_sauce_400g",
+      "name": "Pasta Sauce 400g",
+      "category": "Groceries",
+      "price": 140.0,
+      "unit": "jar",
+      "tags": [
+        "vegetarian"
+      ]
+    },
+    {
+      "id": "chips_masala",
+      "name": "Masala Chips 100g",
+      "category": "Snacks",
+      "price": 30.0,
+      "unit": "pack",
+      "tags": [
+        "snack"
+      ]
+    },
+    {
+      "id": "sandwich_veg",
+      "name": "Veg Sandwich (ready)",
+      "category": "Prepared Food",
+      "price": 95.0,
+      "unit": "each",
+      "tags": [
+        "vegetarian"
+      ]
+    },
+    {
+      "id": "pizza_margherita",
+      "name": "Margherita Pizza (medium)",
+      "category": "Prepared Food",
+      "price": 399.0,
+      "unit": "each",
+      "tags": [
+        "vegetarian"
+      ]
+    },
+    {
+      "id": "banana_kg",
+      "name": "Banana (per kg)",
+      "category": "Groceries",
+      "price": 60.0,
+      "unit": "kg",
+      "tags": [
+        "fruit"
+      ]
+    },
+    {
+      "id": "butter_200g",
+      "name": "Salted Butter 200g",
+      "category": "Groceries",
+      "price": 120.0,
+      "unit": "pack",
+      "tags": []
+    },
+    {
+      "id": "instant_noodles",
+      "name": "Instant Noodles 70g",
+      "category": "Snacks",
+      "price": 20.0,
+      "unit": "pack",
+      "tags": [
+        "instant"
+      ]
+    }
+  ],
+  "recipes": {
+    "peanut butter sandwich": [
+      {
+        "id": "bread_wholewheat",
+        "qty": 2
+      },
+      {
+        "id": "peanut_butter_200g",
+        "qty": 1
+      }
+    ],
+    "pasta for two": [
+      {
+        "id": "pasta_500g",
+        "qty": 1
+      },
+      {
+        "id": "pasta_sauce_400g",
+        "qty": 1
+      },
+      {
+        "id": "butter_200g",
+        "qty": 1
+      }
+    ],
+    "simple breakfast": [
+      {
+        "id": "eggs_6",
+        "qty": 1
+      },
+      {
+        "id": "milk_1l",
+        "qty": 1
+      },
+      {
+        "id": "bread_wholewheat",
+        "qty": 1
+      }
+    ]
+  }
+}

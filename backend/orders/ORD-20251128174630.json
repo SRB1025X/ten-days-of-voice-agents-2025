@@ -1,0 +1,30 @@
+{
+  "order_id": "ORD-20251128174630",
+  "timestamp": "2025-11-28T17:46:30",
+  "customer_name": "Sam",
+  "address": "Hyderabad, Telangana",
+  "items": [
+    {
+      "id": "1L_milk",
+      "subtotal": 3.5,
+      "qty": 1,
+      "name": "1L Milk",
+      "unit_price": 3.5
+    },
+    {
+      "unit_price": 3,
+      "name": "500g Spaghetti Pasta",
+      "qty": 1,
+      "id": "500g_spaghetti",
+      "subtotal": 3
+    },
+    {
+      "subtotal": 2.5,
+      "name": "400g Tomato Pasta Sauce",
+      "qty": 1,
+      "id": "400g_tomato_sauce",
+      "unit_price": 2.5
+    }
+  ],
+  "total": 9.0
+}

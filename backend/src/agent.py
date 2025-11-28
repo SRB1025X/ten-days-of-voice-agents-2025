@@ -1,9 +1,9 @@
 import logging
 import os
-import json
 import re
+import json
 from datetime import datetime
-from typing import List, Optional, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from dotenv import load_dotenv
 from livekit.agents import (
@@ -24,258 +24,253 @@ from livekit.plugins import murf, silero, google, deepgram, noise_cancellation
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
 # -------------------------------------------------- #
-#                        Setup                        #
+#                      Setup                          #
 # -------------------------------------------------- #
-
-logger = logging.getLogger("fraud_agent")
+logger = logging.getLogger("order_agent")
 load_dotenv(".env.local")
 
-DATA_DIR = os.path.join(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")), "shared-data")
-os.makedirs(DATA_DIR, exist_ok=True)
-FRAUD_DB_PATH = os.path.join(DATA_DIR, "fraud_cases.json")
+SHARED_DIR = os.path.join(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")), "shared-data")
+os.makedirs(SHARED_DIR, exist_ok=True)
 
-
-# -------------------------------------------------- #
-#               Username extraction helper           #
-# -------------------------------------------------- #
-def extract_username(raw: str) -> str:
-    """
-    Extract a likely username token from a free-form transcription.
-    Examples handled:
-      - "My username is Sam"  -> "sam"
-      - "username: neha.r"    -> "neha.r"
-      - "It is Megha.S."      -> "megha.s"
-      - "sam"                 -> "sam"
-    Returns empty string if nothing plausible found.
-    """
-    if not raw:
-        return ""
-
-    text = raw.strip()
-
-    # try some regex patterns (case-insensitive)
-    patterns = [
-        r"username\s*(?:is|:|\-|=)\s*([A-Za-z0-9._-]+)",   # username is sam / username: sam
-        r"my username is\s*([A-Za-z0-9._-]+)",
-        r"it's username\s*([A-Za-z0-9._-]+)",
-        r"username\s+([A-Za-z0-9._-]+)",                  # username sam
-        r"i am\s+([A-Za-z0-9._-]+)",                      # i am sam
-        r"i'm\s+([A-Za-z0-9._-]+)",
-        r"it is\s+([A-Za-z0-9._-]+)",
-    ]
-
-    lowered = text.lower()
-    for pat in patterns:
-        m = re.search(pat, lowered, flags=re.IGNORECASE)
-        if m:
-            candidate = m.group(1)
-            candidate = candidate.strip().strip(".,;!?'\"")
-            return candidate.lower()
-
-    # fallback: take last token (common in speech)
-    tokens = re.split(r"\s+", text)
-    if not tokens:
-        return ""
-
-    last = tokens[-1].strip()
-    # remove trailing punctuation
-    last = last.strip(".,;!?'\"").lower()
-
-    # if last contains only letters/digits and punctuation used in usernames, accept
-    if re.match(r"^[a-z0-9._-]+$", last, flags=re.IGNORECASE):
-        return last.lower()
-
-    # otherwise try to find first token that looks like username
-    for t in tokens:
-        t2 = t.strip(".,;!?'\"").lower()
-        if re.match(r"^[a-z0-9._-]{2,}$", t2):
-            return t2
-
-    return ""
-
+CATALOG_PATH = os.path.join(SHARED_DIR, "catalog.json")
+ORDERS_DIR = os.path.join(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")), "orders")
+os.makedirs(ORDERS_DIR, exist_ok=True)
 
 # -------------------------------------------------- #
-#               Sample DB creation helper             #
+#               Create a sample catalog               #
 # -------------------------------------------------- #
-def ensure_sample_db():
-    """If the fraud_cases.json file doesn't exist, create it with sample entries."""
-    if os.path.exists(FRAUD_DB_PATH):
+def ensure_sample_catalog():
+    if os.path.exists(CATALOG_PATH):
         try:
-            # ensure it's valid JSON
-            with open(FRAUD_DB_PATH, "r", encoding="utf-8") as f:
+            with open(CATALOG_PATH, "r", encoding="utf-8") as f:
                 json.load(f)
             return
         except Exception:
-            logger.warning("Existing fraud DB is invalid — will overwrite with sample data.")
+            logger.warning("Existing catalog is invalid — will overwrite with sample catalog.")
 
-    sample_cases = [
-        {
-            "case_id": "CASE-1001",
-            "username": "raj.kumar",
-            "customer_name": "Raj Kumar",
-            "security_question": "What is the name of your first pet?",
-            "security_answer": "tommy",  # fake expected answer (lowercase)
-            "masked_card": "**** 1234",
-            "transaction_amount": "₹3,499.00",
-            "merchant_name": "Vogue Electronics",
-            "location": "Hyderabad, IN",
-            "timestamp": "2025-11-20T14:32:00Z",
-            "status": "pending_review",
-            "outcome_note": ""
+    sample_catalog = {
+        "meta": {
+            "store_name": "FoodMate Market",
+            "currency": "INR"
         },
-        {
-            # normalized username to lowercase 'sam' so lookup matches lowercase extraction
-            "case_id": "CASE-1002",
-            "username": "sam",
-            "customer_name": "Sneha Rao",
-            "security_question": "Which city were you born in?",
-            "security_answer": "visakhapatnam",
-            "masked_card": "**** 9876",
-            "transaction_amount": "₹799.00",
-            "merchant_name": "Daily Foods Pvt Ltd",
-            "location": "Bengaluru, IN",
-            "timestamp": "2025-11-21T19:05:00Z",
-            "status": "pending_review",
-            "outcome_note": ""
+        "items": [
+            {"id": "bread_wholewheat", "name": "Whole Wheat Bread (400g)", "category": "Groceries", "price": 55.0, "unit": "loaf", "tags": ["vegan"]},
+            {"id": "milk_1l", "name": "Milk 1L (Toned)", "category": "Groceries", "price": 48.0, "unit": "bottle", "tags": []},
+            {"id": "eggs_6", "name": "Eggs (6 pack)", "category": "Groceries", "price": 60.0, "unit": "pack", "tags": []},
+            {"id": "peanut_butter_200g", "name": "Peanut Butter 200g", "category": "Groceries", "price": 190.0, "unit": "jar", "tags": ["vegan"]},
+            {"id": "pasta_500g", "name": "Pasta 500g", "category": "Groceries", "price": 120.0, "unit": "pack", "tags": []},
+            {"id": "pasta_sauce_400g", "name": "Pasta Sauce 400g", "category": "Groceries", "price": 140.0, "unit": "jar", "tags": ["vegetarian"]},
+            {"id": "chips_masala", "name": "Masala Chips 100g", "category": "Snacks", "price": 30.0, "unit": "pack", "tags": ["snack"]},
+            {"id": "sandwich_veg", "name": "Veg Sandwich (ready)", "category": "Prepared Food", "price": 95.0, "unit": "each", "tags": ["vegetarian"]},
+            {"id": "pizza_margherita", "name": "Margherita Pizza (medium)", "category": "Prepared Food", "price": 399.0, "unit": "each", "tags": ["vegetarian"]},
+            {"id": "banana_kg", "name": "Banana (per kg)", "category": "Groceries", "price": 60.0, "unit": "kg", "tags": ["fruit"]},
+            {"id": "butter_200g", "name": "Salted Butter 200g", "category": "Groceries", "price": 120.0, "unit": "pack", "tags": []},
+            {"id": "instant_noodles", "name": "Instant Noodles 70g", "category": "Snacks", "price": 20.0, "unit": "pack", "tags": ["instant"]}
+        ],
+        # small recipe mapping: dish -> list of item ids (and suggested quantities)
+        "recipes": {
+            "peanut butter sandwich": [
+                {"id": "bread_wholewheat", "qty": 2},
+                {"id": "peanut_butter_200g", "qty": 1}
+            ],
+            "pasta for two": [
+                {"id": "pasta_500g", "qty": 1},
+                {"id": "pasta_sauce_400g", "qty": 1},
+                {"id": "butter_200g", "qty": 1}
+            ],
+            "simple breakfast": [
+                {"id": "eggs_6", "qty": 1},
+                {"id": "milk_1l", "qty": 1},
+                {"id": "bread_wholewheat", "qty": 1}
+            ]
         }
-    ]
+    }
 
     try:
-        with open(FRAUD_DB_PATH, "w", encoding="utf-8") as f:
-            json.dump(sample_cases, f, indent=2, ensure_ascii=False)
-        logger.info(f"Created sample fraud DB at {FRAUD_DB_PATH}")
+        with open(CATALOG_PATH, "w", encoding="utf-8") as f:
+            json.dump(sample_catalog, f, indent=2, ensure_ascii=False)
+        logger.info(f"Created sample catalog at {CATALOG_PATH}")
     except Exception:
-        logger.exception("Failed to write sample fraud DB")
+        logger.exception("Failed to write sample catalog")
 
 
-# Ensure DB exists at import time
-ensure_sample_db()
-
+ensure_sample_catalog()
 
 # -------------------------------------------------- #
-#                DB read / write helpers              #
+#                  Catalog helpers                    #
 # -------------------------------------------------- #
-def read_fraud_db() -> List[Dict[str, Any]]:
+def load_catalog() -> Dict[str, Any]:
     try:
-        with open(FRAUD_DB_PATH, "r", encoding="utf-8") as f:
+        with open(CATALOG_PATH, "r", encoding="utf-8") as f:
             return json.load(f)
-    except Exception as e:
-        logger.exception("Failed to read fraud DB")
-        return []
-
-
-def write_fraud_db(cases: List[Dict[str, Any]]) -> bool:
-    try:
-        with open(FRAUD_DB_PATH, "w", encoding="utf-8") as f:
-            json.dump(cases, f, indent=2, ensure_ascii=False)
-        return True
     except Exception:
-        logger.exception("Failed to write fraud DB")
-        return False
+        logger.exception("Failed to load catalog")
+        return {"meta": {}, "items": [], "recipes": {}}
+
+
+CATALOG = load_catalog()
+ITEM_INDEX = {item["id"]: item for item in CATALOG.get("items", [])}
+NAME_INDEX = {item["name"].lower(): item for item in CATALOG.get("items", [])}
+SHORTNAME_INDEX = {}  # map short tokens to likely item ids
+for it in CATALOG.get("items", []):
+    # add common short forms
+    key = it["name"].lower()
+    parts = re.split(r"[\s,()]+", key)
+    for p in parts:
+        if len(p) > 2:
+            SHORTNAME_INDEX.setdefault(p, []).append(it["id"])
 
 
 # -------------------------------------------------- #
-#                    Tool: Get case                   #
-# -------------------------------------------------- #
-@function_tool
-async def get_fraud_case_by_username(ctx: RunContext, username: str) -> str:
-    """
-    Returns a JSON string of the first matching fraud case for `username`
-    or the string "not_found".
-    This now extracts a cleaned username token from free-form input before lookup.
-    """
-    # Extract and normalize
-    username_clean = extract_username(username)
-    username_norm = (username_clean or "").strip().lower()
-    if not username_norm:
-        return "not_found"
-
-    cases = read_fraud_db()
-    for case in cases:
-        if case.get("username", "").strip().lower() == username_norm:
-            return json.dumps(case)
-    return "not_found"
-
-
-# -------------------------------------------------- #
-#                   Tool: Update case                 #
+#               Order persistence tool                #
 # -------------------------------------------------- #
 @function_tool
-async def update_fraud_case(ctx: RunContext, case_id: str, new_status: str, outcome_note: str) -> str:
+async def save_order(ctx: RunContext, customer_name: Optional[str], address: Optional[str], cart: List[Dict[str, Any]], total: float) -> str:
     """
-    Update the case with given case_id. Returns 'saved:<path>' or 'not_found' or 'error'.
+    Save final order JSON to ORDERS_DIR.
+    cart: list of {id, name, qty, unit_price, subtotal, notes?}
+    total: float
     """
-    cases = read_fraud_db()
-    found = False
-    for c in cases:
-        if c.get("case_id") == case_id:
-            c["status"] = new_status
-            c["outcome_note"] = outcome_note
-            c["last_updated"] = datetime.utcnow().isoformat(timespec="seconds")
-            found = True
-            break
-    if not found:
-        return "not_found"
-    ok = write_fraud_db(cases)
-    if not ok:
+    order = {
+        "order_id": f"ORD-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}",
+        "timestamp": datetime.utcnow().isoformat(timespec="seconds"),
+        "customer_name": customer_name or "",
+        "address": address or "",
+        "items": cart,
+        "total": total
+    }
+
+    filename = f"{order['order_id']}.json"
+    path = os.path.join(ORDERS_DIR, filename)
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(order, f, indent=2, ensure_ascii=False)
+    except Exception:
+        logger.exception("Failed to save order to disk")
         return "error"
-    return f"saved:{FRAUD_DB_PATH}"
+    return f"saved:{path}"
 
 
 # -------------------------------------------------- #
-#                    Fraud Agent Persona              #
+#                    Ordering Agent                   #
 # -------------------------------------------------- #
-class FraudAgent(Agent):
+class OrderAgent(Agent):
     def __init__(self) -> None:
-        self.active_case = None
-        """
-        The agent is a calm, professional fraud representative for a fictional bank ('Summit Bank').
-        It should ask for username, use get_fraud_case_by_username(username) to load the case,
-        then verify the user with the stored security question (non-sensitive),
-        and proceed to read the suspicious transaction details and ask if the user made it.
+        # cart stored in scenario state (agent instance)
+        self.cart: List[Dict[str, Any]] = []
+        self.customer_name: Optional[str] = None
+        self.address: Optional[str] = None
 
-        On conclusion it must call update_fraud_case(case_id, new_status, outcome_note).
-        """
         instructions = (
-            "You are a calm, professional fraud representative for 'Summit Bank' Fraud Response Team.\n\n"
-            "The username for this session is ALWAYS 'sam'"
-            "=== CALL FLOW ===\n"
-            "1. Greet caller and explain this is about a suspicious transaction.\n"
-            "2. Ask the caller for their **username**.\n"
-            "3. When user gives username, ALWAYS call the tool:\n"
-            "      get_fraud_case_by_username(username)\n\n"
-
-            "4. When tool returns a JSON case:\n"
-            "      - Parse it.\n"
-            "      - Store it internally as: active_case\n"
-            "        (Meaning the agent must remember it for the rest of the call.)\n\n"
-
-            "5. Ask the security question stored in active_case.security_question.\n"
-            "   Compare user’s spoken answer (lowercase) to active_case.security_answer.\n"
-            "   • If mismatch → verification_failed → call update_fraud_case() and end call.\n\n"
-
-            "6. If verification succeeds:\n"
-            "   • Read suspicious transaction details from active_case\n"
-            "   • Ask: 'Did you make this transaction? Yes/No?'\n"
-            "   • If YES → confirmed_safe → call update_fraud_case()\n"
-            "   • If NO → confirmed_fraud → call update_fraud_case()\n\n"
-
-            "7. End the call with reassurance and final status.\n\n"
-
-            "RULES:\n"
-            "- NEVER ask for full card number, password, PIN, CVV.\n"
-            "- Only use the fields inside the loaded case.\n"
-            "- ALWAYS store the loaded case into active_case before continuing.\n"
+            "You are FoodMate Market — a friendly food & grocery ordering assistant.\n\n"
+            "Primary responsibilities:\n"
+            "- Greet the user and explain you can help them order groceries, snacks, and prepared food.\n"
+            "- Ask clarifying questions when an item needs size/quantity/brand.\n"
+            "- Support these cart operations: add, remove, update quantity, list cart, clear cart.\n"
+            "- Support 'ingredients for X' requests by mapping recipes in the catalog to multiple items and adding them to the cart.\n"
+            "- When the user says 'place my order' or 'that's all', confirm the final cart contents, total, and call the tool:\n"
+            "    save_order(customer_name, address, cart, total)\n"
+            "- After saving, tell the user the order id/path returned by the tool.\n\n"
+            "Cart schema (for your reference): each cart item is an object with keys: id, name, qty, unit_price, subtotal, notes(optional).\n\n"
+            "Rules:\n"
+            "- Use only items in the catalog. If user asks for an unknown item, ask for clarification or offer close matches.\n"
+            "- Always confirm additions/changes to the cart with a short sentence (e.g., 'Added 2 x Whole Wheat Bread to your cart').\n"
+            "- If user asks for 'ingredients for X', use the recipes mapping in the catalog. If a recipe is not found, propose likely items using catalog tags.\n"
+            "- Keep language friendly, short, and voice-friendly.\n"
         )
 
-        super().__init__(instructions=instructions, tools=[get_fraud_case_by_username, update_fraud_case])
+        super().__init__(instructions=instructions, tools=[save_order])
+
+    # Helper methods available to the LLM via instructions (the LLM should call tools not these directly,
+    # but these are useful for any internal usage if you expand the agent)
+    def find_item_by_name(self, query: str) -> Optional[Dict[str, Any]]:
+        q = query.strip().lower()
+        # exact match by id
+        if q in ITEM_INDEX:
+            return ITEM_INDEX[q]
+        # exact / partial match by full name
+        if q in NAME_INDEX:
+            return NAME_INDEX[q]
+        # token match
+        parts = re.split(r"[\s,()]+", q)
+        for p in parts:
+            if p in SHORTNAME_INDEX:
+                # return first candidate
+                candidate_id = SHORTNAME_INDEX[p][0]
+                return ITEM_INDEX.get(candidate_id)
+        # try fuzzy substring
+        for it in CATALOG.get("items", []):
+            if q in it["name"].lower():
+                return it
+        return None
+
+    def add_to_cart(self, item_id: str, qty: int = 1, notes: Optional[str] = None) -> Dict[str, Any]:
+        item = ITEM_INDEX.get(item_id)
+        if not item:
+            raise KeyError("unknown_item")
+        unit_price = float(item["price"])
+        subtotal = round(unit_price * qty, 2)
+        # if exists, update quantity
+        for c in self.cart:
+            if c["id"] == item_id:
+                c["qty"] += qty
+                c["subtotal"] = round(float(c["unit_price"]) * c["qty"], 2)
+                if notes:
+                    c["notes"] = notes
+                return c
+        cart_item = {"id": item_id, "name": item["name"], "qty": qty, "unit_price": unit_price, "subtotal": subtotal}
+        if notes:
+            cart_item["notes"] = notes
+        self.cart.append(cart_item)
+        return cart_item
+
+    def remove_from_cart(self, item_id: str) -> bool:
+        for idx, c in enumerate(self.cart):
+            if c["id"] == item_id:
+                del self.cart[idx]
+                return True
+        return False
+
+    def update_quantity(self, item_id: str, qty: int) -> bool:
+        for c in self.cart:
+            if c["id"] == item_id:
+                c["qty"] = qty
+                c["subtotal"] = round(float(c["unit_price"]) * qty, 2)
+                return True
+        return False
+
+    def list_cart(self) -> List[Dict[str, Any]]:
+        return self.cart
+
+    def cart_total(self) -> float:
+        return round(sum(float(c["subtotal"]) for c in self.cart), 2)
+
+    def apply_recipe(self, recipe_name: str) -> List[Dict[str, Any]]:
+        recipes = CATALOG.get("recipes", {})
+        key = recipe_name.strip().lower()
+        added = []
+        if key in recipes:
+            for entry in recipes[key]:
+                item_id = entry["id"]
+                qty = int(entry.get("qty", 1))
+                added_item = self.add_to_cart(item_id, qty)
+                added.append(added_item)
+        else:
+            # fallback: try token matching against recipe keys
+            for rname in recipes.keys():
+                if key in rname:
+                    for entry in recipes[rname]:
+                        item_id = entry["id"]
+                        qty = int(entry.get("qty", 1))
+                        added_item = self.add_to_cart(item_id, qty)
+                        added.append(added_item)
+        return added
 
 
 # -------------------------------------------------- #
 #                Single Voice (No Switching)         #
 # -------------------------------------------------- #
-def pick_voice(agent: FraudAgent):
-    # Using Murf Falcon Indian English voice (Anisha) per your request
+def pick_voice(agent: OrderAgent):
     return murf.TTS(
         voice="en-IN-Anisha",
         style="Conversational",
@@ -295,10 +290,9 @@ def prewarm(proc: JobProcess):
 #                      Entry Point                   #
 # -------------------------------------------------- #
 async def entrypoint(ctx: JobContext):
-
     ctx.log_context_fields = {"room": ctx.room.name}
 
-    agent = FraudAgent()
+    agent = OrderAgent()
 
     session = AgentSession(
         stt=deepgram.STT(model="nova-3"),
@@ -317,7 +311,7 @@ async def entrypoint(ctx: JobContext):
         usage.collect(ev.metrics)
 
     async def show_usage():
-        logger.info(f"Fraud Agent usage summary: {usage.get_summary()}")
+        logger.info(f"Order Agent usage summary: {usage.get_summary()}")
 
     ctx.add_shutdown_callback(show_usage)
 
