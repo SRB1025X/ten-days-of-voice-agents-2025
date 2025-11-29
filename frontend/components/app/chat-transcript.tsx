@@ -9,26 +9,8 @@ const MotionChatEntry = motion.create(ChatEntry);
 
 const CONTAINER_MOTION_PROPS = {
   variants: {
-    hidden: {
-      opacity: 0,
-      transition: {
-        ease: 'easeOut',
-        duration: 0.3,
-        staggerChildren: 0.1,
-        staggerDirection: -1,
-      },
-    },
-    visible: {
-      opacity: 1,
-      transition: {
-        delay: 0.2,
-        ease: 'easeOut',
-        duration: 0.3,
-        stagerDelay: 0.2,
-        staggerChildren: 0.1,
-        staggerDirection: 1,
-      },
-    },
+    hidden: { opacity: 0 },
+    visible: { opacity: 1 },
   },
   initial: 'hidden',
   animate: 'visible',
@@ -37,14 +19,8 @@ const CONTAINER_MOTION_PROPS = {
 
 const MESSAGE_MOTION_PROPS = {
   variants: {
-    hidden: {
-      opacity: 0,
-      translateY: 10,
-    },
-    visible: {
-      opacity: 1,
-      translateY: 0,
-    },
+    hidden: { opacity: 0, translateY: 10 },
+    visible: { opacity: 1, translateY: 0 },
   },
 };
 
@@ -62,21 +38,25 @@ export function ChatTranscript({
     <AnimatePresence>
       {!hidden && (
         <MotionContainer {...CONTAINER_MOTION_PROPS} {...props}>
-          {messages.map(({ id, timestamp, from, message, editTimestamp }: ReceivedChatMessage) => {
-            const locale = navigator?.language ?? 'en-US';
+          {messages.map(({ id, timestamp, from, message }: ReceivedChatMessage) => {
             const messageOrigin = from?.isLocal ? 'local' : 'remote';
-            const hasBeenEdited = !!editTimestamp;
 
             return (
-              <MotionChatEntry
+              <div
                 key={id}
-                locale={locale}
-                timestamp={timestamp}
-                message={message}
-                messageOrigin={messageOrigin}
-                hasBeenEdited={hasBeenEdited}
-                {...MESSAGE_MOTION_PROPS}
-              />
+                className={
+                  messageOrigin === 'local'
+                    ? 'bg-blue-600/30 border border-blue-500 p-3 rounded-xl text-blue-200 max-w-lg ml-auto shadow-md'
+                    : 'bg-amber-100/50 border border-amber-300 p-4 rounded-xl text-amber-900 max-w-lg mr-auto shadow-md font-serif'
+                }
+              >
+                <MotionChatEntry
+                  message={message}   // ⭐ FIXED HERE
+                  timestamp={timestamp}
+                  messageOrigin={messageOrigin}
+                  {...MESSAGE_MOTION_PROPS}
+                />
+              </div>
             );
           })}
         </MotionContainer>
