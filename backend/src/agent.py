@@ -1,7 +1,8 @@
 import logging
 import os
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List, Dict, Any
+import json
 
 from dotenv import load_dotenv
 from livekit.agents import (
@@ -18,89 +19,192 @@ from livekit.agents import (
     function_tool,
     RunContext,
 )
+
 from livekit.plugins import murf, silero, google, deepgram, noise_cancellation
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
-
 
 # -------------------------------------------------- #
 #                    Setup                           #
 # -------------------------------------------------- #
-logger = logging.getLogger("game_master_agent")
+logger = logging.getLogger("ecommerce_agent")
 load_dotenv(".env.local")
 
+ORDERS_FILE = "orders.json"
 
 # -------------------------------------------------- #
-#              Game State Reset Tool                 #
+#          Load & Save Orders Persistently           #
 # -------------------------------------------------- #
+def load_orders() -> List[Dict[str, Any]]:
+    if not os.path.exists(ORDERS_FILE):
+        return []
+    try:
+        with open(ORDERS_FILE, "r") as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+def save_orders(orders: List[Dict[str, Any]]):
+    with open(ORDERS_FILE, "w") as f:
+        json.dump(orders, f, indent=2)
+
+
+ORDERS = load_orders()
+
+# -------------------------------------------------- #
+#                   Catalog                          #
+# -------------------------------------------------- #
+
+PRODUCTS = [
+    {
+        "id": "mug-001",
+        "name": "Stoneware Coffee Mug",
+        "price": 800,
+        "currency": "INR",
+        "category": "mug",
+        "color": "white",
+    },
+    {
+        "id": "mug-002",
+        "name": "Blue Ceramic Mug",
+        "price": 950,
+        "currency": "INR",
+        "category": "mug",
+        "color": "blue",
+    },
+    {
+        "id": "hoodie-001",
+        "name": "Black Hoodie",
+        "price": 1699,
+        "currency": "INR",
+        "category": "hoodie",
+        "color": "black",
+        "sizes": ["S", "M", "L", "XL"],
+    },
+    {
+        "id": "tshirt-001",
+        "name": "Graphic T-Shirt",
+        "price": 499,
+        "currency": "INR",
+        "category": "tshirt",
+        "color": "white",
+        "sizes": ["M", "L"],
+    }
+]
+
+# -------------------------------------------------- #
+#               Merchant Layer Tools                 #
+# -------------------------------------------------- #
+
+def apply_filters(filters: Dict[str, Any]) -> List[Dict[str, Any]]:
+    result = PRODUCTS
+
+    if "category" in filters:
+        result = [p for p in result if p["category"] == filters["category"]]
+
+    if "color" in filters:
+        result = [p for p in result if p.get("color") == filters["color"]]
+
+    if "max_price" in filters:
+        result = [p for p in result if p["price"] <= filters["max_price"]]
+
+    return result
+
+
 @function_tool
-async def restart_story(ctx: RunContext) -> str:
+async def list_products(ctx: RunContext, filters: Dict[str, Any] | None = None) -> List[Dict[str, Any]]:
     """
-    Reset the adventure and start a brand new story.
-    Called when user says 'restart', 'start over', etc.
+    ACP-like function: Return catalog items that match filters.
+    Example filters: { "category": "mug", "color": "blue", "max_price": 1000 }
     """
-    ctx.agent.reset_story_state()
-    return "story_restarted"
+    return apply_filters(filters or {})
+
+
+@function_tool
+async def create_order(ctx: RunContext, items: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Create an order in ACP style.
+    items example: [{ "product_id": "hoodie-001", "quantity": 1 }]
+    """
+
+    order_items = []
+    total = 0
+
+    for line in items:
+        pid = line["product_id"]
+        qty = line.get("quantity", 1)
+
+        prod = next((p for p in PRODUCTS if p["id"] == pid), None)
+        if not prod:
+            continue
+
+        price = prod["price"] * qty
+        total += price
+
+        order_items.append({
+            "product_id": pid,
+            "name": prod["name"],
+            "quantity": qty,
+            "unit_price": prod["price"],
+            "subtotal": price,
+        })
+
+    order = {
+        "id": f"order-{len(ORDERS)+1:03}",
+        "items": order_items,
+        "total": total,
+        "currency": "INR",
+        "created_at": datetime.utcnow().isoformat(),
+    }
+
+    ORDERS.append(order)
+    save_orders(ORDERS)
+
+    return order
+
+
+@function_tool
+async def get_last_order(ctx: RunContext) -> Dict[str, Any] | None:
+    """Returns the user's most recent order."""
+    return ORDERS[-1] if ORDERS else None
 
 
 # -------------------------------------------------- #
-#                  Game Master Agent                 #
+#                    E-Commerce Agent                #
 # -------------------------------------------------- #
-class GameMasterAgent(Agent):
+class EcommerceAgent(Agent):
     """
-    Your Day 8 D&D-style fantasy adventure Game Master.
-    Uses only conversation history (LLM memory) + optional local state.
+    Voice-based e-commerce assistant following ACP-inspired flow.
     """
 
     def __init__(self):
-        self.story_started = False
-        self.player_name: Optional[str] = None
-
         instructions = (
-            "You are a dramatic and immersive **Fantasy Game Master (GM)** "
-            "running a voice-based Dungeons & Dragons style adventure.\n\n"
+            "You are a friendly **E-commerce Shopping Assistant**.\n\n"
 
-            "=== UNIVERSE ===\n"
-            "High-fantasy realm called Eldoria — dragons, ancient ruins, enchanted forests, "
-            "mystic artifacts, magical beasts, and lost kingdoms.\n\n"
+            "You help users browse products and place orders.\n\n"
 
-            "=== TONE ===\n"
-            "Epic, descriptive, adventurous, slightly mysterious.\n"
-            "Speak like a storyteller. Create wonder, danger, and excitement.\n\n"
-
-            "=== ROLE ===\n"
-            "- Narrate scenes vividly.\n"
-            "- Advance the story based on player decisions.\n"
-            "- ALWAYS end messages with a question: 'What do you do?'\n"
-            "- Maintain continuity using chat history.\n"
-            "- Remember characters, events, dangers, decisions.\n\n"
-
-            "=== RULES ===\n"
-            "- Start the adventure the moment the player speaks.\n"
-            "- Never break character.\n"
-            "- Avoid long paragraphs — keep responses 4–6 sentences.\n"
-            "- If user says things like 'restart story', call the tool restart_story().\n"
-            "- After tool returns 'story_restarted', begin a brand new adventure.\n\n"
-
-            "=== SESSION STRUCTURE ===\n"
-            "Your story should:\n"
-            "- Begin with a mysterious hook.\n"
-            "- Present choices, challenges, or characters.\n"
-            "- Build toward a small arc (e.g., discovering a relic, escaping danger).\n"
-            "- ALWAYS end with 'What do you do?'\n"
+            "=== BEHAVIOR RULES ===\n"
+            "- When user asks about items, call list_products(filters).\n"
+            "- When user tries to buy something, call create_order(items).\n"
+            "- When user asks what they purchased, call get_last_order().\n"
+            "- Always respond briefly, 2–4 sentences.\n"
+            "- Keep a conversational, helpful tone.\n"
+            "- Do not invent products that do not exist in the catalog.\n"
+            "- Extract attributes like category, color, size, price filters.\n"
+            "- Ensure all the attributes are filled before placing the order. \n"
+            "- If user asks for a product that is not available, suggest alternatives.\n"
+            "- After calling tools, summarize results clearly.\n"
         )
 
-        super().__init__(instructions=instructions, tools=[restart_story])
-
-    # Reset state when restart_story() tool is called
-    def reset_story_state(self):
-        self.story_started = False
-        self.player_name = None
+        super().__init__(
+            instructions=instructions,
+            tools=[list_products, create_order, get_last_order],
+        )
 
 
 # -------------------------------------------------- #
 #             Voice: Murf Falcon (India)             #
 # -------------------------------------------------- #
-def pick_voice(agent: GameMasterAgent):
+def pick_voice(agent: EcommerceAgent):
     return murf.TTS(
         voice="en-IN-Anisha",
         style="Conversational",
@@ -122,7 +226,7 @@ def prewarm(proc: JobProcess):
 async def entrypoint(ctx: JobContext):
     ctx.log_context_fields = {"room": ctx.room.name}
 
-    agent = GameMasterAgent()
+    agent = EcommerceAgent()
 
     session = AgentSession(
         stt=deepgram.STT(model="nova-3"),
@@ -141,7 +245,7 @@ async def entrypoint(ctx: JobContext):
         usage.collect(ev.metrics)
 
     async def show_usage():
-        logger.info(f"Game Master Agent usage summary: {usage.get_summary()}")
+        logger.info(f"E-commerce Agent usage summary: {usage.get_summary()}")
 
     ctx.add_shutdown_callback(show_usage)
 
