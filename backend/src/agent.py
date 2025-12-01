@@ -26,185 +26,126 @@ from livekit.plugins.turn_detector.multilingual import MultilingualModel
 # -------------------------------------------------- #
 #                    Setup                           #
 # -------------------------------------------------- #
-logger = logging.getLogger("ecommerce_agent")
+logger = logging.getLogger("improv_battle_agent")
 load_dotenv(".env.local")
 
-ORDERS_FILE = "orders.json"
-
 # -------------------------------------------------- #
-#          Load & Save Orders Persistently           #
+#         Improv Scenarios (Static List)             #
 # -------------------------------------------------- #
-def load_orders() -> List[Dict[str, Any]]:
-    if not os.path.exists(ORDERS_FILE):
-        return []
-    try:
-        with open(ORDERS_FILE, "r") as f:
-            return json.load(f)
-    except Exception:
-        return []
-
-def save_orders(orders: List[Dict[str, Any]]):
-    with open(ORDERS_FILE, "w") as f:
-        json.dump(orders, f, indent=2)
-
-
-ORDERS = load_orders()
-
-# -------------------------------------------------- #
-#                   Catalog                          #
-# -------------------------------------------------- #
-
-PRODUCTS = [
-    {
-        "id": "mug-001",
-        "name": "Stoneware Coffee Mug",
-        "price": 800,
-        "currency": "INR",
-        "category": "mug",
-        "color": "white",
-    },
-    {
-        "id": "mug-002",
-        "name": "Blue Ceramic Mug",
-        "price": 950,
-        "currency": "INR",
-        "category": "mug",
-        "color": "blue",
-    },
-    {
-        "id": "hoodie-001",
-        "name": "Black Hoodie",
-        "price": 1699,
-        "currency": "INR",
-        "category": "hoodie",
-        "color": "black",
-        "sizes": ["S", "M", "L", "XL"],
-    },
-    {
-        "id": "tshirt-001",
-        "name": "Graphic T-Shirt",
-        "price": 499,
-        "currency": "INR",
-        "category": "tshirt",
-        "color": "white",
-        "sizes": ["M", "L"],
-    }
+SCENARIOS = [
+    "You are a time-travelling tour guide explaining smartphones to someone from the 1800s.",
+    "You are a waiter who must calmly tell a customer their order escaped the kitchen.",
+    "You are trying to return a clearly cursed object to a skeptical shopkeeper.",
+    "You are a detective interrogating a penguin who refuses to answer questions.",
+    "You are a wizard whose wand is malfunctioning during a very serious council meeting.",
 ]
 
+STATE_FILE = "improv_state.json"
+
+def save_state_to_json(state: dict):
+    try:
+        with open(STATE_FILE, "w") as f:
+            json.dump(state, f, indent=4)
+        logger.info("State saved to improv_state.json")
+    except Exception as e:
+        logger.error(f"Failed to save state: {e}")
+
+
 # -------------------------------------------------- #
-#               Merchant Layer Tools                 #
+#     Tools — Maintain Game State in Backend         #
 # -------------------------------------------------- #
-
-def apply_filters(filters: Dict[str, Any]) -> List[Dict[str, Any]]:
-    result = PRODUCTS
-
-    if "category" in filters:
-        result = [p for p in result if p["category"] == filters["category"]]
-
-    if "color" in filters:
-        result = [p for p in result if p.get("color") == filters["color"]]
-
-    if "max_price" in filters:
-        result = [p for p in result if p["price"] <= filters["max_price"]]
-
-    return result
+@function_tool
+async def get_state(ctx: RunContext) -> Dict[str, Any]:
+    """Returns the current improv game state."""
+    return ctx.session.userdata.get("improv_state")
 
 
 @function_tool
-async def list_products(ctx: RunContext, filters: Dict[str, Any] | None = None) -> List[Dict[str, Any]]:
-    """
-    ACP-like function: Return catalog items that match filters.
-    Example filters: { "category": "mug", "color": "blue", "max_price": 1000 }
-    """
-    return apply_filters(filters or {})
+async def start_new_round(ctx: RunContext) -> Dict[str, Any]:
+    state = ctx.session.userdata["improv_state"]
 
+    state["current_round"] += 1
+    idx = state["current_round"] - 1
+    state["phase"] = "awaiting_improv"
 
-@function_tool
-async def create_order(ctx: RunContext, items: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """
-    Create an order in ACP style.
-    items example: [{ "product_id": "hoodie-001", "quantity": 1 }]
-    """
+    scenario = SCENARIOS[idx % len(SCENARIOS)]
+    state["rounds"].append({
+        "scenario": scenario,
+        "host_reaction": None,
+    })
 
-    order_items = []
-    total = 0
+    # NEW → Save after modification
+    save_state_to_json(state)
 
-    for line in items:
-        pid = line["product_id"]
-        qty = line.get("quantity", 1)
-
-        prod = next((p for p in PRODUCTS if p["id"] == pid), None)
-        if not prod:
-            continue
-
-        price = prod["price"] * qty
-        total += price
-
-        order_items.append({
-            "product_id": pid,
-            "name": prod["name"],
-            "quantity": qty,
-            "unit_price": prod["price"],
-            "subtotal": price,
-        })
-
-    order = {
-        "id": f"order-{len(ORDERS)+1:03}",
-        "items": order_items,
-        "total": total,
-        "currency": "INR",
-        "created_at": datetime.utcnow().isoformat(),
+    return {
+        "round_number": state["current_round"],
+        "scenario": scenario
     }
 
-    ORDERS.append(order)
-    save_orders(ORDERS)
-
-    return order
-
 
 @function_tool
-async def get_last_order(ctx: RunContext) -> Dict[str, Any] | None:
-    """Returns the user's most recent order."""
-    return ORDERS[-1] if ORDERS else None
+async def finish_round(ctx: RunContext, reaction: str) -> Dict[str, Any]:
+    state = ctx.session.userdata["improv_state"]
+    round_index = state["current_round"] - 1
+
+    state["rounds"][round_index]["host_reaction"] = reaction
+    state["phase"] = "reacting"
+
+    # NEW → Save after modification
+    save_state_to_json(state)
+
+    return {
+        "round_number": state["current_round"],
+        "reaction_stored": True
+    }
 
 
 # -------------------------------------------------- #
-#                    E-Commerce Agent                #
+#             Improv Battle Game Agent               #
 # -------------------------------------------------- #
-class EcommerceAgent(Agent):
-    """
-    Voice-based e-commerce assistant following ACP-inspired flow.
-    """
-
+class ImprovAgent(Agent):
     def __init__(self):
         instructions = (
-            "You are a friendly **E-commerce Shopping Assistant**.\n\n"
+            "You are the high-energy host of a wild TV improv competition called **Improv Battle**.\n"
+            "Your job:\n"
+            "- Run a fun 3-round improv contest.\n"
+            "- Keep the tone witty, punchy, and playful.\n"
+            "- You may tease the player lightly but never be abusive.\n"
+            "- You MUST follow state provided via tools.\n"
+            "- Randomly vary reactions: supportive, neutral, or mildly critical.\n\n"
+            "- The participant name is Sam.\n\n"
 
-            "You help users browse products and place orders.\n\n"
+            "=== GAME FLOW ===\n"
+            "PHASE: intro → awaiting_improv → reacting → done\n\n"
 
-            "=== BEHAVIOR RULES ===\n"
-            "- When user asks about items, call list_products(filters).\n"
-            "- When user tries to buy something, call create_order(items).\n"
-            "- When user asks what they purchased, call get_last_order().\n"
-            "- Always respond briefly, 2–4 sentences.\n"
-            "- Keep a conversational, helpful tone.\n"
-            "- Do not invent products that do not exist in the catalog.\n"
-            "- Extract attributes like category, color, size, price filters.\n"
-            "- Ensure all the attributes are filled before placing the order. \n"
-            "- If user asks for a product that is not available, suggest alternatives.\n"
-            "- After calling tools, summarize results clearly.\n"
+            "**Intro Phase:**\n"
+            "- Greet the player.\n"
+            "- Explain the rules.\n"
+            "- Ask their name if missing.\n"
+            "- When ready, call `start_new_round()`.\n\n"
+
+            "**Awaiting Improv:**\n"
+            "- Present the scenario to the player.\n"
+            "- Tell them to improvise.\n"
+            "- When the user stops or says 'end scene', call `finish_round()` with a reaction.\n"
+            "- After reaction, if rounds < max_rounds → start_new_round().\n"
+            "- Otherwise, close the show.\n\n"
+
+            "**Done Phase:**\n"
+            "- Thank the player.\n"
+            "- End the show politely.\n"
         )
 
         super().__init__(
             instructions=instructions,
-            tools=[list_products, create_order, get_last_order],
+            tools=[get_state, start_new_round, finish_round],
         )
 
 
 # -------------------------------------------------- #
-#             Voice: Murf Falcon (India)             #
+#               Voice: Murf Falcon (India)           #
 # -------------------------------------------------- #
-def pick_voice(agent: EcommerceAgent):
+def pick_voice(agent: ImprovAgent):
     return murf.TTS(
         voice="en-IN-Anisha",
         style="Conversational",
@@ -226,7 +167,16 @@ def prewarm(proc: JobProcess):
 async def entrypoint(ctx: JobContext):
     ctx.log_context_fields = {"room": ctx.room.name}
 
-    agent = EcommerceAgent()
+    # Initialize per-session improv game state
+    ctx.proc.userdata["improv_state"] = {
+        "player_name": None,
+        "current_round": 0,
+        "max_rounds": 3,
+        "rounds": [],
+        "phase": "intro",
+    }
+
+    agent = ImprovAgent()
 
     session = AgentSession(
         stt=deepgram.STT(model="nova-3"),
@@ -236,6 +186,7 @@ async def entrypoint(ctx: JobContext):
         vad=ctx.proc.userdata["vad_model"],
         preemptive_generation=True,
     )
+    session.userdata = ctx.proc.userdata
 
     usage = metrics.UsageCollector()
 
@@ -245,7 +196,7 @@ async def entrypoint(ctx: JobContext):
         usage.collect(ev.metrics)
 
     async def show_usage():
-        logger.info(f"E-commerce Agent usage summary: {usage.get_summary()}")
+        logger.info(f"Improv Battle usage summary: {usage.get_summary()}")
 
     ctx.add_shutdown_callback(show_usage)
 

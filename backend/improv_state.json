@@ -1,0 +1,20 @@
+{
+    "player_name": null,
+    "current_round": 3,
+    "max_rounds": 3,
+    "rounds": [
+        {
+            "scenario": "You are a time-travelling tour guide explaining smartphones to someone from the 1800s.",
+            "host_reaction": "Woah there, Sam, slow down! You're explaining a smartphone, not describing a blurry photograph! A little more razzle-dazzle next time, eh? But hey, points for getting to the point!"
+        },
+        {
+            "scenario": "You are a waiter who must calmly tell a customer their order escaped the kitchen.",
+            "host_reaction": "Alright, Sam, \"your chicken just flew out of the kitchen\"?! That's a new one! I've heard of food poisoning, but food *flight*? Love the creativity, even if it might scare away a few customers! Points for originality!"
+        },
+        {
+            "scenario": "You are trying to return a clearly cursed object to a skeptical shopkeeper.",
+            "host_reaction": "Alright, Sam, \"the objective is so messed with this\" and it \"came alive and is trying to hit me\"?! You really painted a picture there! A little dramatic, perhaps, but hey, you got the cursed object message across!"
+        }
+    ],
+    "phase": "reacting"
+}

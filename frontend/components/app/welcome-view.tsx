@@ -1,4 +1,7 @@
+'use client';
+
 import { Button } from '@/components/livekit/button';
+import { useState } from 'react';
 
 function WelcomeImage() {
   return (
@@ -21,41 +24,55 @@ function WelcomeImage() {
 interface WelcomeViewProps {
   startButtonText: string;
   onStartCall: () => void;
+  onNameChange?: (name: string) => void;
 }
 
 export const WelcomeView = ({
   startButtonText,
   onStartCall,
+  onNameChange,
   ref,
 }: React.ComponentProps<'div'> & WelcomeViewProps) => {
+  const [name, setName] = useState('');
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setName(e.target.value);
+    onNameChange?.(e.target.value);
+  };
+
   return (
     <div ref={ref}>
-      <section className="bg-background flex flex-col items-center justify-center text-center">
+      <section className="bg-background flex flex-col items-center justify-center text-center py-20">
         <WelcomeImage />
 
+        <h1 className="text-3xl font-bold text-foreground mb-2">
+          🎭 Improv Battle – Voice Game
+        </h1>
+
         <p className="text-foreground max-w-prose pt-1 leading-6 font-medium">
-          Chat live with your voice AI agent
+          Face off against an AI performer in rapid-fire improv scenes!
         </p>
 
-        <Button variant="primary" size="lg" onClick={onStartCall} className="mt-6 w-64 font-mono">
-          {startButtonText}
+        {/* 👉 Player Name Input */}
+        <input
+          type="text"
+          placeholder="Enter your name"
+          value={name}
+          onChange={handleChange}
+          className="mt-6 w-64 px-3 py-2 rounded-md border border-gray-300 
+                     bg-background text-foreground focus:outline-none"
+        />
+
+        <Button
+          variant="primary"
+          size="lg"
+          onClick={onStartCall}
+          className="mt-6 w-64 font-mono"
+        >
+          {/* Force override for Day 9 */}
+          Start Improv Battle
         </Button>
       </section>
-
-      <div className="fixed bottom-5 left-0 flex w-full items-center justify-center">
-        <p className="text-muted-foreground max-w-prose pt-1 text-xs leading-5 font-normal text-pretty md:text-sm">
-          Need help getting set up? Check out the{' '}
-          <a
-            target="_blank"
-            rel="noopener noreferrer"
-            href="https://docs.livekit.io/agents/start/voice-ai/"
-            className="underline"
-          >
-            Voice AI quickstart
-          </a>
-          .
-        </p>
-      </div>
     </div>
   );
 };
